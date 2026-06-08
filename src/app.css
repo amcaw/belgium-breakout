@@ -26,8 +26,6 @@
   --board-bg: #06203a;
   --board-frame: #04111f;
   --paddle: #f0f0f1;
-  --ball-hi: #ffffff;
-  --ball-lo: var(--accent);
   --brick-stroke: var(--board-bg);
 
   --font: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -59,8 +57,6 @@
     --board-bg: #ffffff;
     --board-frame: #e3e8ef;
     --paddle: #2e3238;
-    --ball-hi: #ffffff;
-    --ball-lo: var(--accent);
     --brick-stroke: var(--board-bg);
   }
 }

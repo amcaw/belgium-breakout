@@ -108,8 +108,13 @@
   let paddleX = $state(W / 2 - paddleW / 2);
 
   const R = 9;
-  let ball = $state({ x: W / 2, y: paddleY - R - 2, vx: 0, vy: 0 });
   const BASE_SPEED = 7.2;
+  const MAX_BALLS = 3;
+  let ballSeq = 0;
+  function makeBall(x, y, vx = 0, vy = 0) {
+    return { id: ballSeq++, x, y, vx, vy, trail: [] };
+  }
+  let balls = $state([makeBall(W / 2, paddleY - R - 2)]);
 
   let particles = $state([]);
   let popups = $state([]);
@@ -162,12 +167,25 @@
 
     if (phase === 'ready' && mode) {
       const angle = -Math.PI / 2 + (Math.random() * 0.6 - 0.3);
-      ball.vx = Math.cos(angle) * BASE_SPEED;
-      ball.vy = Math.sin(angle) * BASE_SPEED;
+      const b0 = balls[0];
+      b0.vx = Math.cos(angle) * BASE_SPEED;
+      b0.vy = Math.sin(angle) * BASE_SPEED;
       phase = 'playing';
       combo = 0;
       if (mode === 'objective' && !mission) pickMission();
     }
+  }
+
+  function ballSpeed() {
+    return Math.min(BASE_SPEED + score / 45000, 12.5);
+  }
+
+  function spawnExtraBall(x, y) {
+    if (balls.length >= MAX_BALLS) return;
+    const speed = ballSpeed();
+    const angle = -Math.PI / 2 + (Math.random() * 1.2 - 0.6);
+    balls.push(makeBall(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed));
+    spawnPopup(x, y, 'BALLE BONUS');
   }
 
   function resetGame() {
@@ -189,7 +207,7 @@
   }
 
   function resetBall() {
-    ball = { x: paddleX + paddleW / 2, y: paddleY - R - 2, vx: 0, vy: 0 };
+    balls = [makeBall(paddleX + paddleW / 2, paddleY - R - 2)];
   }
 
   function spawnParticles(cx, cy, color, n = 10) {
@@ -212,21 +230,24 @@
     const fx = ((clientX - rect.left) / rect.width) * W;
     return Math.max(WALL, Math.min(W - WALL - paddleW, fx - paddleW / 2));
   }
+  function idleBallToPaddle() {
+    if (phase === 'ready' && balls[0]) balls[0].x = paddleX + paddleW / 2;
+  }
   function onMouseMove(e) {
     paddleX = pointerToField(e.clientX);
-    if (phase === 'ready') ball.x = paddleX + paddleW / 2;
+    idleBallToPaddle();
   }
   function onTouchMove(e) {
     if (e.touches[0]) {
       paddleX = pointerToField(e.touches[0].clientX);
-      if (phase === 'ready') ball.x = paddleX + paddleW / 2;
+      idleBallToPaddle();
       e.preventDefault();
     }
   }
   function onTouchStart(e) {
     if (e.touches[0]) {
       paddleX = pointerToField(e.touches[0].clientX);
-      if (phase === 'ready') ball.x = paddleX + paddleW / 2;
+      idleBallToPaddle();
     }
     launchBall();
     e.preventDefault();
@@ -239,10 +260,10 @@
       launchBall();
       e.preventDefault();
     }
-    if (phase === 'ready') ball.x = paddleX + paddleW / 2;
+    idleBallToPaddle();
   }
 
-  function hitBrick(b) {
+  function hitBrick(ball, b) {
     const nx = Math.max(b.x, Math.min(ball.x, b.x + b.w));
     const ny = Math.max(b.y, Math.min(ball.y, b.y + b.h));
     const dx = ball.x - nx;
@@ -259,96 +280,112 @@
     return true;
   }
 
+  function breakBrick(b, ball) {
+    b.alive = false;
+    aliveCount -= 1;
+    combo += 1;
+    let gain = 50 + Math.round(b.pop / 100) + combo * 25;
+
+    const isMission = mission && b.id === mission.id;
+    if (isMission) {
+      gain += MISSION_BONUS;
+      missionsDone += 1;
+      mission = null;
+      missionFlash = 1;
+    }
+    score += gain;
+    freedCount += 1;
+    freedPop += b.pop;
+
+    destroyed.unshift({
+      key: destroyedSeq++,
+      name: b.name,
+      pop: b.pop,
+      rank: b.rank,
+      points: gain
+    });
+    if (destroyed.length > 60) destroyed.length = 60;
+
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    spawnParticles(cx, cy, popColor(b.pop), (isMission ? 18 : 8) + (combo > 3 ? 6 : 0));
+    if (combo >= 2) spawnPopup(cx, cy, `×${combo}`);
+
+    if (b.rank > 0 && b.rank <= 15) spawnExtraBall(ball.x, ball.y);
+    else if (combo === 8) spawnExtraBall(ball.x, ball.y);
+    if (isMission) spawnExtraBall(ball.x, ball.y);
+
+    if (aliveCount <= 0) {
+      phase = 'won';
+      score += lives * 5000;
+    } else if (mode === 'objective' && !mission) {
+      pickMission();
+    }
+  }
+
   function tick() {
     if (phase === 'playing') {
-      ball.x += ball.vx;
-      ball.y += ball.vy;
+      for (const ball of balls) {
+        ball.x += ball.vx;
+        ball.y += ball.vy;
 
-      if (ball.x - R < WALL) {
-        ball.x = WALL + R;
-        ball.vx = Math.abs(ball.vx);
-      } else if (ball.x + R > W - WALL) {
-        ball.x = W - WALL - R;
-        ball.vx = -Math.abs(ball.vx);
-      }
-      if (ball.y - R < WALL) {
-        ball.y = WALL + R;
-        ball.vy = Math.abs(ball.vy);
-      }
+        ball.trail.push({ x: ball.x, y: ball.y });
+        if (ball.trail.length > 14) ball.trail.shift();
 
-      if (
-        ball.vy > 0 &&
-        ball.y + R >= paddleY &&
-        ball.y - R <= paddleY + paddleH &&
-        ball.x >= paddleX - R &&
-        ball.x <= paddleX + paddleW + R
-      ) {
-        const rel = (ball.x - (paddleX + paddleW / 2)) / (paddleW / 2);
-        const angle = -Math.PI / 2 + rel * (Math.PI / 3);
-        const speed = Math.min(BASE_SPEED + score / 45000, 12.5);
-        ball.vx = Math.cos(angle) * speed;
-        ball.vy = Math.sin(angle) * speed;
-        ball.y = paddleY - R - 1;
-        combo = 0;
-      }
+        if (ball.x - R < WALL) {
+          ball.x = WALL + R;
+          ball.vx = Math.abs(ball.vx);
+        } else if (ball.x + R > W - WALL) {
+          ball.x = W - WALL - R;
+          ball.vx = -Math.abs(ball.vx);
+        }
+        if (ball.y - R < WALL) {
+          ball.y = WALL + R;
+          ball.vy = Math.abs(ball.vy);
+        }
 
-      for (const b of bricks) {
-        if (!b.alive) continue;
         if (
-          ball.x + R < b.x ||
-          ball.x - R > b.x + b.w ||
-          ball.y + R < b.y ||
-          ball.y - R > b.y + b.h
-        )
-          continue;
-        if (hitBrick(b)) {
-          b.alive = false;
-          aliveCount -= 1;
-          combo += 1;
-          let gain = 50 + Math.round(b.pop / 100) + combo * 25;
+          ball.vy > 0 &&
+          ball.y + R >= paddleY &&
+          ball.y - R <= paddleY + paddleH &&
+          ball.x >= paddleX - R &&
+          ball.x <= paddleX + paddleW + R
+        ) {
+          const rel = (ball.x - (paddleX + paddleW / 2)) / (paddleW / 2);
+          const angle = -Math.PI / 2 + rel * (Math.PI / 3);
+          const speed = ballSpeed();
+          ball.vx = Math.cos(angle) * speed;
+          ball.vy = Math.sin(angle) * speed;
+          ball.y = paddleY - R - 1;
+          combo = 0;
+        }
 
-          const isMission = mission && b.id === mission.id;
-          if (isMission) {
-            gain += MISSION_BONUS;
-            missionsDone += 1;
-            mission = null;
-            missionFlash = 1;
+        for (const b of bricks) {
+          if (!b.alive) continue;
+          if (
+            ball.x + R < b.x ||
+            ball.x - R > b.x + b.w ||
+            ball.y + R < b.y ||
+            ball.y - R > b.y + b.h
+          )
+            continue;
+          if (hitBrick(ball, b)) {
+            breakBrick(b, ball);
+            break;
           }
-          score += gain;
-          freedCount += 1;
-          freedPop += b.pop;
-
-          destroyed.unshift({
-            key: destroyedSeq++,
-            name: b.name,
-            pop: b.pop,
-            rank: b.rank,
-            points: gain
-          });
-          if (destroyed.length > 60) destroyed.length = 60;
-          spawnParticles(
-            b.x + b.w / 2,
-            b.y + b.h / 2,
-            popColor(b.pop),
-            (isMission ? 18 : 8) + (combo > 3 ? 6 : 0)
-          );
-          if (combo >= 2) spawnPopup(b.x + b.w / 2, b.y + b.h / 2, `×${combo}`);
-          if (aliveCount <= 0) {
-            phase = 'won';
-            score += lives * 5000;
-          } else if (mode === 'objective' && !mission) {
-            pickMission();
-          }
-          break;
         }
       }
 
-      if (ball.y - R > H) {
-        lives -= 1;
-        if (lives <= 0) phase = 'lost';
-        else {
-          phase = 'ready';
-          resetBall();
+      const fell = balls.filter((ball) => ball.y - R > H);
+      if (fell.length) {
+        balls = balls.filter((ball) => ball.y - R <= H);
+        if (balls.length === 0) {
+          lives -= 1;
+          if (lives <= 0) phase = 'lost';
+          else {
+            phase = 'ready';
+            resetBall();
+          }
         }
       }
     }
@@ -405,6 +442,9 @@
   };
 
   const legend = $derived([0, 0.25, 0.5, 0.75, 1].map((t) => heat(t)));
+
+  const textScale = $derived(Math.min(2.6, Math.max(1, W / Math.max(1, boardW))));
+  const fs = (base) => base * textScale;
 </script>
 
 <svelte:window onmousemove={onMouseMove} onkeydown={onKey} />
@@ -482,10 +522,13 @@
         ontouchmove={onTouchMove}
       >
         <defs>
-          <radialGradient id="ballGrad" cx="35%" cy="30%">
-            <stop offset="0%" stop-color="var(--ball-hi)" />
-            <stop offset="55%" stop-color="var(--ball-lo)" />
-            <stop offset="100%" stop-color="var(--accent)" />
+          <clipPath id="ballClip">
+            <circle cx="0" cy="0" r={R} />
+          </clipPath>
+          <radialGradient id="ballGloss" cx="35%" cy="30%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.65" />
+            <stop offset="45%" stop-color="#ffffff" stop-opacity="0.1" />
+            <stop offset="100%" stop-color="#000000" stop-opacity="0.25" />
           </radialGradient>
         </defs>
 
@@ -537,7 +580,26 @@
           fill="var(--paddle)"
         />
 
-        <circle cx={ball.x} cy={ball.y} r={R} fill="url(#ballGrad)" />
+        {#each balls as ball (ball.id)}
+          {#each ball.trail as t, i}
+            <circle
+              cx={t.x}
+              cy={t.y}
+              r={R * (0.3 + (0.6 * i) / ball.trail.length)}
+              fill="var(--accent)"
+              opacity={(0.28 * (i + 1)) / ball.trail.length}
+            />
+          {/each}
+          <g transform={`translate(${ball.x},${ball.y})`}>
+            <g clip-path="url(#ballClip)">
+              <rect x={-R} y={-R} width={(2 * R) / 3} height={2 * R} fill="#2d2926" />
+              <rect x={-R / 3} y={-R} width={(2 * R) / 3} height={2 * R} fill="#fae042" />
+              <rect x={R / 3} y={-R} width={(2 * R) / 3} height={2 * R} fill="#ed2939" />
+              <circle cx="0" cy="0" r={R} fill="url(#ballGloss)" />
+            </g>
+            <circle cx="0" cy="0" r={R} fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="0.8" />
+          </g>
+        {/each}
 
         {#each popups as p (p.key)}
           <text
@@ -553,28 +615,28 @@
         {#if phase === 'ready' && mode}
           <g class="overlay">
             <rect class="scrim" x="0" y="0" width={W} height={H} />
-            <text x={W / 2} y={H / 2 - 6} class="big">Prêt ?</text>
-            <text x={W / 2} y={H / 2 + 34} class="cta">Clic / Espace pour lancer · Souris ou ← → pour déplacer</text>
+            <text x={W / 2} y={H / 2 - fs(6)} class="big" font-size={fs(42)}>Prêt ?</text>
+            <text x={W / 2} y={H / 2 + fs(38)} class="cta" font-size={fs(15)}>Clic / Espace pour lancer · Souris ou ← → pour déplacer</text>
           </g>
         {:else if phase === 'won' || phase === 'lost'}
           <g class="overlay">
             <rect class="scrim" x="0" y="0" width={W} height={H} />
             {#if phase === 'won'}
-              <text x={W / 2} y={H / 2 - 70} class="big win">Belgique libérée !</text>
-              <text x={W / 2} y={H / 2 - 28} class="sub">Score final : {fmt.format(score)}</text>
-              <text x={W / 2} y={H / 2 + 8} class="recap">Tu as libéré {fmt.format(totalBricks)} communes — toute la Belgique.</text>
-              <text x={W / 2} y={H / 2 + 36} class="recap">{fmt.format(totalPop)} habitants{#if mode === 'objective'} · {missionsDone} objectif{missionsDone > 1 ? 's' : ''} accompli{missionsDone > 1 ? 's' : ''}{/if}</text>
-              <text x={W / 2} y={H / 2 + 64} class="recap">La plus peuplée : {topCity.name} ({fmt.format(topCity.pop)})</text>
-              <text x={W / 2} y={H / 2 + 104} class="cta">Clic pour rejouer</text>
+              <text x={W / 2} y={H / 2 - fs(78)} class="big win" font-size={fs(42)}>Belgique libérée !</text>
+              <text x={W / 2} y={H / 2 - fs(32)} class="sub" font-size={fs(18)}>Score final : {fmt.format(score)}</text>
+              <text x={W / 2} y={H / 2 + fs(6)} class="recap" font-size={fs(15)}>Tu as libéré {fmt.format(totalBricks)} communes — toute la Belgique.</text>
+              <text x={W / 2} y={H / 2 + fs(34)} class="recap" font-size={fs(15)}>{fmt.format(totalPop)} habitants{#if mode === 'objective'} · {missionsDone} objectif{missionsDone > 1 ? 's' : ''} accompli{missionsDone > 1 ? 's' : ''}{/if}</text>
+              <text x={W / 2} y={H / 2 + fs(62)} class="recap" font-size={fs(15)}>La plus peuplée : {topCity.name} ({fmt.format(topCity.pop)})</text>
+              <text x={W / 2} y={H / 2 + fs(104)} class="cta" font-size={fs(15)}>Clic pour rejouer</text>
             {:else}
-              <text x={W / 2} y={H / 2 - 70} class="big lose">Partie terminée</text>
-              <text x={W / 2} y={H / 2 - 28} class="sub">{fmt.format(score)} points</text>
-              <text x={W / 2} y={H / 2 + 8} class="recap">{freedCount} communes libérées sur {totalBricks} ({pct}%)</text>
-              <text x={W / 2} y={H / 2 + 36} class="recap">{popPct}% de la population belge libérée</text>
+              <text x={W / 2} y={H / 2 - fs(78)} class="big lose" font-size={fs(42)}>Partie terminée</text>
+              <text x={W / 2} y={H / 2 - fs(32)} class="sub" font-size={fs(18)}>{fmt.format(score)} points</text>
+              <text x={W / 2} y={H / 2 + fs(6)} class="recap" font-size={fs(15)}>{freedCount} communes libérées sur {totalBricks} ({pct}%)</text>
+              <text x={W / 2} y={H / 2 + fs(34)} class="recap" font-size={fs(15)}>{popPct}% de la population belge libérée</text>
               {#if mode === 'objective'}
-                <text x={W / 2} y={H / 2 + 64} class="recap">{missionsDone} objectif{missionsDone > 1 ? 's' : ''} accompli{missionsDone > 1 ? 's' : ''}</text>
+                <text x={W / 2} y={H / 2 + fs(62)} class="recap" font-size={fs(15)}>{missionsDone} objectif{missionsDone > 1 ? 's' : ''} accompli{missionsDone > 1 ? 's' : ''}</text>
               {/if}
-              <text x={W / 2} y={H / 2 + 104} class="cta">Clic pour réessayer</text>
+              <text x={W / 2} y={H / 2 + fs(104)} class="cta" font-size={fs(15)}>Clic pour réessayer</text>
             {/if}
           </g>
         {/if}
@@ -1105,7 +1167,6 @@
   }
   .big {
     fill: var(--text);
-    font-size: 42px;
     font-weight: 700;
     text-anchor: middle;
     letter-spacing: -0.01em;
@@ -1118,19 +1179,16 @@
   }
   .sub {
     fill: var(--text-secondary);
-    font-size: 18px;
     font-weight: 500;
     text-anchor: middle;
   }
   .recap {
     fill: var(--text-secondary);
-    font-size: 15px;
     font-weight: 500;
     text-anchor: middle;
   }
   .cta {
     fill: var(--text-muted);
-    font-size: 14px;
     font-weight: 500;
     text-anchor: middle;
   }
@@ -1165,15 +1223,6 @@
     }
     .value {
       font-size: 1rem;
-    }
-    .big {
-      font-size: 30px;
-    }
-    .sub {
-      font-size: 15px;
-    }
-    .cta {
-      font-size: 12px;
     }
     .start {
       gap: 0.4rem;
