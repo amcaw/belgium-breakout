@@ -612,13 +612,7 @@
           >{p.text}</text>
         {/each}
 
-        {#if phase === 'ready' && mode}
-          <g class="overlay">
-            <rect class="scrim" x="0" y="0" width={W} height={H} />
-            <text x={W / 2} y={H / 2 - fs(6)} class="big" font-size={fs(42)}>Prêt ?</text>
-            <text x={W / 2} y={H / 2 + fs(38)} class="cta" font-size={fs(15)}>Clic / Espace pour lancer · Souris ou ← → pour déplacer</text>
-          </g>
-        {:else if phase === 'won' || phase === 'lost'}
+        {#if phase === 'won' || phase === 'lost'}
           <g class="overlay">
             <rect class="scrim" x="0" y="0" width={W} height={H} />
             {#if phase === 'won'}
@@ -641,6 +635,13 @@
           </g>
         {/if}
       </svg>
+      {#if phase === 'ready' && mode}
+        <div class="ready-overlay">
+          <span class="ready-title">Prêt ?</span>
+          <span class="ready-hint">Clic ou Espace pour lancer</span>
+          <span class="ready-hint">Souris ou ← → pour déplacer la raquette</span>
+        </div>
+      {/if}
       {#if phase === 'ready' && !mode}
 
         <div class="start">
@@ -1065,6 +1066,32 @@
     cursor: pointer;
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  .ready-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: clamp(0.75rem, 4vw, 1.5rem);
+    background: color-mix(in srgb, var(--board-bg) 88%, transparent);
+    text-align: center;
+    pointer-events: none;
+  }
+  .ready-title {
+    font-size: clamp(1.6rem, 6vw, 2.6rem);
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .ready-hint {
+    max-width: 100%;
+    font-size: clamp(0.72rem, 2.6vw, 0.95rem);
+    color: var(--text-muted);
+    line-height: 1.35;
   }
 
   .start {
