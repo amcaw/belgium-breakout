@@ -112,6 +112,8 @@
   const BASE_SPEED = 7.2;
 
   let particles = $state([]);
+  let popups = $state([]);
+  let popupSeq = 0;
 
   const PANEL_W = 320;
   const STACK_PANEL_H = 132;
@@ -175,6 +177,7 @@
     lives = 3;
     combo = 0;
     particles = [];
+    popups = [];
     destroyed = [];
     freedCount = 0;
     freedPop = 0;
@@ -196,6 +199,11 @@
       particles.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, color });
     }
     if (particles.length > 400) particles.splice(0, particles.length - 400);
+  }
+
+  function spawnPopup(cx, cy, text) {
+    popups.push({ key: popupSeq++, x: cx, y: cy, text, life: 1 });
+    if (popups.length > 30) popups.splice(0, popups.length - 30);
   }
 
   function pointerToField(clientX) {
@@ -324,6 +332,7 @@
             popColor(b.pop),
             (isMission ? 18 : 8) + (combo > 3 ? 6 : 0)
           );
+          if (combo >= 2) spawnPopup(b.x + b.w / 2, b.y + b.h / 2, `×${combo}`);
           if (aliveCount <= 0) {
             phase = 'won';
             score += lives * 5000;
@@ -352,6 +361,14 @@
         p.life -= 0.025;
       }
       particles = particles.filter((p) => p.life > 0);
+    }
+
+    if (popups.length) {
+      for (const p of popups) {
+        p.y -= 0.9;
+        p.life -= 0.018;
+      }
+      popups = popups.filter((p) => p.life > 0);
     }
 
     if (missionFlash > 0) missionFlash = Math.max(0, missionFlash - 0.02);
@@ -521,6 +538,17 @@
         />
 
         <circle cx={ball.x} cy={ball.y} r={R} fill="url(#ballGrad)" />
+
+        {#each popups as p (p.key)}
+          <text
+            class="combo-pop"
+            x={p.x}
+            y={p.y}
+            text-anchor="middle"
+            opacity={Math.min(1, p.life * 1.6)}
+            font-size={26 + (1 - p.life) * 14}
+          >{p.text}</text>
+        {/each}
 
         {#if phase === 'ready' && mode}
           <g class="overlay">
@@ -985,9 +1013,10 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 1.5rem;
+    padding: clamp(0.75rem, 3vw, 1.5rem);
     background: color-mix(in srgb, var(--board-bg) 88%, transparent);
     text-align: center;
+    overflow-y: auto;
   }
   .start-title {
     margin: 0;
@@ -1065,6 +1094,15 @@
     fill: var(--board-bg);
     opacity: 0.88;
   }
+  .combo-pop {
+    fill: var(--accent);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    stroke: var(--board-bg);
+    stroke-width: 3;
+    paint-order: stroke fill;
+    pointer-events: none;
+  }
   .big {
     fill: var(--text);
     font-size: 42px;
@@ -1136,6 +1174,34 @@
     }
     .cta {
       font-size: 12px;
+    }
+    .start {
+      gap: 0.4rem;
+      justify-content: flex-start;
+    }
+    .start-sub {
+      margin-bottom: 0.3rem;
+    }
+    .modes {
+      flex-direction: column;
+      gap: 0.5rem;
+      align-items: stretch;
+    }
+    .mode-card {
+      flex: 0 0 auto;
+      max-width: none;
+      width: 100%;
+      padding: 0.7rem 0.85rem;
+      gap: 0.2rem;
+    }
+    .mode-name {
+      font-size: 0.98rem;
+    }
+    .mode-desc {
+      font-size: 0.75rem;
+    }
+    .start-hint {
+      font-size: 0.7rem;
     }
   }
 </style>
