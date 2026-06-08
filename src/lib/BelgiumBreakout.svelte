@@ -212,6 +212,14 @@
       e.preventDefault();
     }
   }
+  function onTouchStart(e) {
+    if (e.touches[0]) {
+      paddleX = pointerToField(e.touches[0].clientX);
+      if (phase === 'ready') ball.x = paddleX + paddleW / 2;
+    }
+    launchBall();
+    e.preventDefault();
+  }
   function onKey(e) {
     const step = 36;
     if (e.key === 'ArrowLeft') paddleX = Math.max(WALL, paddleX - step);
@@ -560,7 +568,13 @@
           <p class="start-hint">Souris ou ← → pour déplacer la raquette</p>
         </div>
       {:else}
-        <button class="hit" onclick={launchBall} aria-label="Lancer la balle"></button>
+        <button
+          class="hit"
+          onclick={launchBall}
+          ontouchstart={onTouchStart}
+          ontouchmove={onTouchMove}
+          aria-label="Lancer la balle"
+        ></button>
       {/if}
     </div>
 
@@ -950,6 +964,8 @@
     background: transparent;
     border: 0;
     cursor: pointer;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .start {

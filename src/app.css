@@ -78,6 +78,15 @@ body {
   font-family: var(--font);
   background-color: var(--bg);
   color: var(--text);
+  overscroll-behavior: none;
+}
+
+body.standalone {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
 }
 
 button,
