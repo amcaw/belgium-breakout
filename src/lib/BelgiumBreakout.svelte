@@ -77,7 +77,8 @@
 
   let destroyed = $state([]);
   let destroyedSeq = 0;
-  const freedPop = $derived(destroyed.reduce((s, d) => s + d.pop, 0));
+  let freedCount = $state(0);
+  let freedPop = $state(0);
 
   const popPct = $derived(totalPop ? Math.round((freedPop / totalPop) * 100) : 0);
 
@@ -175,6 +176,8 @@
     combo = 0;
     particles = [];
     destroyed = [];
+    freedCount = 0;
+    freedPop = 0;
     mission = null;
     missionsDone = 0;
     mode = null;
@@ -304,6 +307,8 @@
             missionFlash = 1;
           }
           score += gain;
+          freedCount += 1;
+          freedPop += b.pop;
 
           destroyed.unshift({
             key: destroyedSeq++,
@@ -536,7 +541,7 @@
             {:else}
               <text x={W / 2} y={H / 2 - 70} class="big lose">Partie terminée</text>
               <text x={W / 2} y={H / 2 - 28} class="sub">{fmt.format(score)} points</text>
-              <text x={W / 2} y={H / 2 + 8} class="recap">{destroyed.length} communes libérées sur {totalBricks} ({pct}%)</text>
+              <text x={W / 2} y={H / 2 + 8} class="recap">{freedCount} communes libérées sur {totalBricks} ({pct}%)</text>
               <text x={W / 2} y={H / 2 + 36} class="recap">{popPct}% de la population belge libérée</text>
               {#if mode === 'objective'}
                 <text x={W / 2} y={H / 2 + 64} class="recap">{missionsDone} objectif{missionsDone > 1 ? 's' : ''} accompli{missionsDone > 1 ? 's' : ''}</text>
@@ -582,7 +587,7 @@
       <header class="log-head">
         <h2>Communes libérées</h2>
         <span class="log-count">
-          {destroyed.length}<span class="of"> / {totalBricks}</span>
+          {freedCount}<span class="of"> / {totalBricks}</span>
         </span>
       </header>
       <div class="log-sub">
@@ -812,6 +817,8 @@
 
   .stage {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
     flex: 1;
     min-height: 0;
     display: flex;
@@ -835,6 +842,7 @@
   .log {
     box-sizing: border-box;
     width: 100%;
+    min-width: 0;
     flex: none;
     min-height: 0;
     display: flex;
@@ -904,6 +912,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
     padding: 5px 6px;
     border-radius: 7px;
     font-size: 0.8rem;
