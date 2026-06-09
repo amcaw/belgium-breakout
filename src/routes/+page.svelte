@@ -17,7 +17,8 @@
   main {
     box-sizing: border-box;
     width: 100%;
-    height: 100%;
+    height: 720px;
+    max-height: 100dvh;
     margin: 0;
     padding: 0;
   }

@@ -4,8 +4,11 @@
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import { flip } from 'svelte/animate';
+  import { initPym, sendHeight } from '$lib/pym.js';
 
   let { geojson } = $props();
+
+  initPym();
 
   const W = 800;
   const H = 900;
@@ -431,7 +434,9 @@
 
   $effect(() => {
     void mode;
+    void phase;
     requestAnimationFrame(fitBoard);
+    sendHeight();
   });
 
   const pct = $derived(
