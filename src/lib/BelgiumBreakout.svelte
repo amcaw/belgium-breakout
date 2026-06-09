@@ -80,7 +80,9 @@
   let freedCount = $state(0);
   let freedPop = $state(0);
 
-  const popPct = $derived(totalPop ? Math.round((freedPop / totalPop) * 100) : 0);
+  const popPct = $derived(
+    !totalPop ? 0 : freedPop >= totalPop ? 100 : Math.min(99, Math.floor((freedPop / totalPop) * 100))
+  );
 
   let mission = $state(null);
   let missionsDone = $state(0);
@@ -126,7 +128,7 @@
 
   let rootEl;
   let hudEl;
-  let missionEl;
+  let missionEl = $state();
   let tickerEl;
   let boardW = $state(W);
   let boardH = $state(H);
@@ -432,7 +434,9 @@
     requestAnimationFrame(fitBoard);
   });
 
-  const pct = $derived(Math.round(((totalBricks - aliveCount) / totalBricks) * 100));
+  const pct = $derived(
+    aliveCount <= 0 ? 100 : Math.min(99, Math.floor(((totalBricks - aliveCount) / totalBricks) * 100))
+  );
   const fmt = {
     format(n) {
       const v = Math.round(n);
