@@ -14,5 +14,4 @@ SCORING.md
 
 media/
 *.mp4
-rec.mjs
-shot.mjs
+*.mjs
