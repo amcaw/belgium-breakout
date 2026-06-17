@@ -451,9 +451,6 @@
   };
 
   const legend = $derived([0, 0.25, 0.5, 0.75, 1].map((t) => heat(t)));
-
-  const textScale = $derived(Math.min(2.6, Math.max(1, W / Math.max(1, boardW))));
-  const fs = (base) => base * textScale;
 </script>
 
 <svelte:window onmousemove={onMouseMove} onkeydown={onKey} />
@@ -621,34 +618,36 @@
           >{p.text}</text>
         {/each}
 
-        {#if phase === 'won' || phase === 'lost'}
-          <g class="overlay">
-            <rect class="scrim" x="0" y="0" width={W} height={H} />
-            {#if phase === 'won'}
-              <text x={W / 2} y={H / 2 - fs(78)} class="big win" font-size={fs(42)}>Belgique libérée !</text>
-              <text x={W / 2} y={H / 2 - fs(32)} class="sub" font-size={fs(18)}>Score final : {fmt.format(score)}</text>
-              <text x={W / 2} y={H / 2 + fs(6)} class="recap" font-size={fs(15)}>Tu as libéré {fmt.format(totalBricks)} communes — toute la Belgique.</text>
-              <text x={W / 2} y={H / 2 + fs(34)} class="recap" font-size={fs(15)}>{fmt.format(totalPop)} habitants{#if mode === 'objective'} · {missionsDone} objectif{missionsDone > 1 ? 's' : ''} accompli{missionsDone > 1 ? 's' : ''}{/if}</text>
-              <text x={W / 2} y={H / 2 + fs(62)} class="recap" font-size={fs(15)}>La plus peuplée : {topCity.name} ({fmt.format(topCity.pop)})</text>
-              <text x={W / 2} y={H / 2 + fs(104)} class="cta" font-size={fs(15)}>Clic pour rejouer</text>
-            {:else}
-              <text x={W / 2} y={H / 2 - fs(78)} class="big lose" font-size={fs(42)}>Partie terminée</text>
-              <text x={W / 2} y={H / 2 - fs(32)} class="sub" font-size={fs(18)}>{fmt.format(score)} points</text>
-              <text x={W / 2} y={H / 2 + fs(6)} class="recap" font-size={fs(15)}>{freedCount} communes libérées sur {totalBricks} ({pct}%)</text>
-              <text x={W / 2} y={H / 2 + fs(34)} class="recap" font-size={fs(15)}>{popPct}% de la population belge libérée</text>
-              {#if mode === 'objective'}
-                <text x={W / 2} y={H / 2 + fs(62)} class="recap" font-size={fs(15)}>{missionsDone} objectif{missionsDone > 1 ? 's' : ''} accompli{missionsDone > 1 ? 's' : ''}</text>
-              {/if}
-              <text x={W / 2} y={H / 2 + fs(104)} class="cta" font-size={fs(15)}>Clic pour réessayer</text>
-            {/if}
-          </g>
-        {/if}
       </svg>
       {#if phase === 'ready' && mode}
         <div class="ready-overlay">
           <span class="ready-title">Prêt ?</span>
           <span class="ready-hint">Clic ou Espace pour lancer</span>
           <span class="ready-hint">Souris ou ← → pour déplacer la raquette</span>
+        </div>
+      {/if}
+      {#if phase === 'won'}
+        <div class="result-overlay">
+          <span class="result-title win">Belgique libérée !</span>
+          <span class="result-sub">Score final : {fmt.format(score)}</span>
+          <span class="result-line">Tu as libéré {fmt.format(totalBricks)} communes — toute la Belgique.</span>
+          <span class="result-line">
+            {fmt.format(totalPop)} habitants{#if mode === 'objective'}{' · '}{missionsDone} objectif{missionsDone > 1 ? 's' : ''} accompli{missionsDone > 1 ? 's' : ''}{/if}
+          </span>
+          <span class="result-line">La plus peuplée : {topCity.name} ({fmt.format(topCity.pop)})</span>
+          <span class="result-cta">Clic pour rejouer</span>
+        </div>
+      {/if}
+      {#if phase === 'lost'}
+        <div class="result-overlay">
+          <span class="result-title lose">Partie terminée</span>
+          <span class="result-sub">{fmt.format(score)} points</span>
+          <span class="result-line">{freedCount} communes libérées sur {totalBricks} ({pct}%)</span>
+          <span class="result-line">{popPct}% de la population belge libérée</span>
+          {#if mode === 'objective'}
+            <span class="result-line">{missionsDone} objectif{missionsDone > 1 ? 's' : ''} accompli{missionsDone > 1 ? 's' : ''}</span>
+          {/if}
+          <span class="result-cta">Clic pour réessayer</span>
         </div>
       {/if}
       {#if phase === 'ready' && !mode}
@@ -1103,6 +1102,50 @@
     line-height: 1.35;
   }
 
+  .result-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: clamp(0.75rem, 4vw, 1.5rem);
+    background: color-mix(in srgb, var(--board-bg) 90%, transparent);
+    text-align: center;
+    overflow-y: auto;
+    pointer-events: none;
+  }
+  .result-title {
+    font-size: clamp(1.5rem, 6vw, 2.6rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+  }
+  .result-title.win {
+    color: var(--positive);
+  }
+  .result-title.lose {
+    color: var(--accent);
+  }
+  .result-sub {
+    margin-top: 0.1rem;
+    font-size: clamp(0.95rem, 3.4vw, 1.2rem);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .result-line {
+    max-width: 100%;
+    font-size: clamp(0.78rem, 2.8vw, 1rem);
+    color: var(--text-secondary);
+    line-height: 1.35;
+  }
+  .result-cta {
+    margin-top: 0.5rem;
+    font-size: clamp(0.74rem, 2.6vw, 0.95rem);
+    color: var(--text-muted);
+  }
+
   .start {
     position: absolute;
     inset: 0;
@@ -1188,10 +1231,6 @@
     color: var(--text-muted);
   }
 
-  .scrim {
-    fill: var(--board-bg);
-    opacity: 0.88;
-  }
   .combo-pop {
     fill: var(--accent);
     font-weight: 800;
@@ -1200,33 +1239,6 @@
     stroke-width: 3;
     paint-order: stroke fill;
     pointer-events: none;
-  }
-  .big {
-    fill: var(--text);
-    font-weight: 700;
-    text-anchor: middle;
-    letter-spacing: -0.01em;
-  }
-  .big.win {
-    fill: var(--positive);
-  }
-  .big.lose {
-    fill: var(--accent);
-  }
-  .sub {
-    fill: var(--text-secondary);
-    font-weight: 500;
-    text-anchor: middle;
-  }
-  .recap {
-    fill: var(--text-secondary);
-    font-weight: 500;
-    text-anchor: middle;
-  }
-  .cta {
-    fill: var(--text-muted);
-    font-weight: 500;
-    text-anchor: middle;
   }
 
   .ticker {
