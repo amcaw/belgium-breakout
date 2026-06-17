@@ -11,3 +11,8 @@ vite.config.ts.timestamp-*
 
 DESIGN_SYSTEM.md
 SCORING.md
+
+media/
+*.mp4
+rec.mjs
+shot.mjs

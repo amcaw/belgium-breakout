@@ -16,51 +16,58 @@
   const ASPECT = W / H;
 
   const heat = (t) => interpolateYlGnBu(0.15 + t * 0.8);
-  const maxPop = Math.max(...geojson.features.map((f) => f.properties?.population ?? 0));
+
+  const setup = (() => {
+    const features = geojson.features;
+    const maxPop = Math.max(...features.map((f) => f.properties?.population ?? 0));
+
+    const projection = geoMercator().fitExtent(
+      [
+        [WALL + 10, 56],
+        [W - WALL - 10, H - 210]
+      ],
+      geojson
+    );
+    const path = geoPath(projection);
+
+    const rankByNis = new Map(
+      [...features]
+        .sort((a, b) => (b.properties?.population ?? 0) - (a.properties?.population ?? 0))
+        .map((f, i) => [String(f.properties?.nis), i + 1])
+    );
+
+    const initialBricks = features
+      .map((f) => {
+        const b = path.bounds(f);
+        const x = b[0][0];
+        const y = b[0][1];
+        const w = b[1][0] - x;
+        const h = b[1][1] - y;
+        const pop = f.properties?.population ?? 0;
+        const name = f.properties?.name_fr ?? f.properties?.name_nl ?? '?';
+        return {
+          id: String(f.properties?.nis ?? name),
+          x: x + 0.9,
+          y: y + 0.9,
+          w: Math.max(1, w - 1.8),
+          h: Math.max(1, h - 1.8),
+          cx: x + w / 2,
+          cy: y + h / 2,
+          name,
+          pop,
+          rank: rankByNis.get(String(f.properties?.nis)) ?? 0,
+          alive: true
+        };
+      })
+      .filter((b) => Number.isFinite(b.x) && Number.isFinite(b.w) && b.w > 0 && b.h > 0);
+
+    const totalPop = initialBricks.reduce((s, b) => s + b.pop, 0);
+    const topCity = initialBricks.reduce((a, b) => (b.pop > a.pop ? b : a), initialBricks[0]);
+    return { maxPop, initialBricks, totalPop, topCity };
+  })();
+
+  const { maxPop, initialBricks, totalPop, topCity } = setup;
   const popColor = (pop) => heat(Math.sqrt(pop) / Math.sqrt(maxPop));
-
-  const projection = geoMercator().fitExtent(
-    [
-      [WALL + 10, 56],
-      [W - WALL - 10, H - 210]
-    ],
-    geojson
-  );
-  const path = geoPath(projection);
-
-  const rankByNis = new Map(
-    [...geojson.features]
-      .sort((a, b) => (b.properties?.population ?? 0) - (a.properties?.population ?? 0))
-      .map((f, i) => [String(f.properties?.nis), i + 1])
-  );
-
-  const initialBricks = geojson.features
-    .map((f) => {
-      const b = path.bounds(f);
-      const x = b[0][0];
-      const y = b[0][1];
-      const w = b[1][0] - x;
-      const h = b[1][1] - y;
-      const pop = f.properties?.population ?? 0;
-      const name = f.properties?.name_fr ?? f.properties?.name_nl ?? '?';
-      return {
-        id: String(f.properties?.nis ?? name),
-        x: x + 0.9,
-        y: y + 0.9,
-        w: Math.max(1, w - 1.8),
-        h: Math.max(1, h - 1.8),
-        cx: x + w / 2,
-        cy: y + h / 2,
-        name,
-        pop,
-        rank: rankByNis.get(String(f.properties?.nis)) ?? 0,
-        alive: true
-      };
-    })
-    .filter((b) => Number.isFinite(b.x) && Number.isFinite(b.w) && b.w > 0 && b.h > 0);
-
-  const totalPop = initialBricks.reduce((s, b) => s + b.pop, 0);
-  const topCity = initialBricks.reduce((a, b) => (b.pop > a.pop ? b : a), initialBricks[0]);
 
   let bricks = $state(initialBricks.map((b) => ({ ...b })));
   let score = $state(0);
@@ -70,12 +77,17 @@
 
   let phase = $state('ready');
   let combo = $state(0);
+  let paused = $state(false);
 
   let mode = $state(null);
 
   function chooseMode(m) {
     mode = m;
     launchBall();
+  }
+
+  function togglePause() {
+    if (phase === 'playing') paused = !paused;
   }
 
   let destroyed = $state([]);
@@ -176,6 +188,7 @@
       b0.vx = Math.cos(angle) * BASE_SPEED;
       b0.vy = Math.sin(angle) * BASE_SPEED;
       phase = 'playing';
+      paused = false;
       combo = 0;
       if (mode === 'objective' && !mission) pickMission();
     }
@@ -207,6 +220,7 @@
     mission = null;
     missionsDone = 0;
     mode = null;
+    paused = false;
     resetBall();
     phase = 'ready';
   }
@@ -258,6 +272,11 @@
     e.preventDefault();
   }
   function onKey(e) {
+    if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+      togglePause();
+      e.preventDefault();
+      return;
+    }
     const step = 36;
     if (e.key === 'ArrowLeft') paddleX = Math.max(WALL, paddleX - step);
     else if (e.key === 'ArrowRight') paddleX = Math.min(W - WALL - paddleW, paddleX + step);
@@ -329,7 +348,7 @@
   }
 
   function tick() {
-    if (phase === 'playing') {
+    if (phase === 'playing' && !paused) {
       for (const ball of balls) {
         ball.x += ball.vx;
         ball.y += ball.vy;
@@ -426,9 +445,14 @@
     if (missionEl) ro.observe(missionEl);
     if (tickerEl) ro.observe(tickerEl);
     raf = requestAnimationFrame(tick);
+    const onHide = () => {
+      if (document.hidden && phase === 'playing') paused = true;
+    };
+    document.addEventListener('visibilitychange', onHide);
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      document.removeEventListener('visibilitychange', onHide);
     };
   });
 
@@ -596,7 +620,7 @@
               opacity={(0.28 * (i + 1)) / ball.trail.length}
             />
           {/each}
-          <g transform={`translate(${ball.x},${ball.y})`}>
+          <g class="ball" transform={`translate(${ball.x},${ball.y})`}>
             <g clip-path="url(#ballClip)">
               <rect x={-R} y={-R} width={(2 * R) / 3} height={2 * R} fill="#2d2926" />
               <rect x={-R / 3} y={-R} width={(2 * R) / 3} height={2 * R} fill="#fae042" />
@@ -679,6 +703,42 @@
           ontouchmove={onTouchMove}
           aria-label="Lancer la balle"
         ></button>
+      {/if}
+
+      {#if phase === 'playing'}
+        <button
+          class="pause-btn"
+          onclick={(e) => {
+            e.stopPropagation();
+            togglePause();
+          }}
+          ontouchstart={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            togglePause();
+          }}
+          aria-label={paused ? 'Reprendre' : 'Pause'}
+        >
+          {#if paused}
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+          {:else}
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" /><rect x="14" y="5" width="4" height="14" /></svg>
+          {/if}
+        </button>
+      {/if}
+
+      {#if paused}
+        <button
+          class="pause-overlay"
+          onclick={togglePause}
+          ontouchstart={(e) => {
+            e.preventDefault();
+            togglePause();
+          }}
+        >
+          <span class="pause-title">Pause</span>
+          <span class="pause-hint">Clic, P ou Échap pour reprendre</span>
+        </button>
       {/if}
     </div>
 
@@ -1142,6 +1202,62 @@
   }
   .result-cta {
     margin-top: 0.5rem;
+    font-size: clamp(0.74rem, 2.6vw, 0.95rem);
+    color: var(--text-muted);
+  }
+
+  .pause-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--surface) 85%, transparent);
+    color: var(--text-secondary);
+    cursor: pointer;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pause-btn:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+  .pause-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+  }
+
+  .pause-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: clamp(0.75rem, 4vw, 1.5rem);
+    border: 0;
+    background: color-mix(in srgb, var(--board-bg) 82%, transparent);
+    text-align: center;
+    cursor: pointer;
+    font: inherit;
+  }
+  .pause-title {
+    font-size: clamp(1.6rem, 6vw, 2.6rem);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+  .pause-hint {
     font-size: clamp(0.74rem, 2.6vw, 0.95rem);
     color: var(--text-muted);
   }
